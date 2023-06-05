@@ -1,190 +1,269 @@
-const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext("2d");
-// we will need the gamecontainer to make it blurry
-// when we display the end menu
-const gameContainer = document.getElementById('game-container');
+const canvas = document.getElementById("canvas");
+const canvasContext = canvas.getContext("2d");
+const pacmanFrames = document.getElementById("animation");
+const ghostFrames = document.getElementById("ghosts");
 
-const flappyImg = new Image();
-flappyImg.src = 'assets/flappy_dunk.png';
+let createRect = (x, y, width, height, color) => {
+    canvasContext.fillStyle = color;
+    canvasContext.fillRect(x, y, width, height);
+};
 
-//Game constants
-const FLAP_SPEED = -5;
-const BIRD_WIDTH = 40;
-const BIRD_HEIGHT = 30;
-const PIPE_WIDTH = 50;
-const PIPE_GAP = 125;
+const DIRECTION_RIGHT = 4;
+const DIRECTION_UP = 3;
+const DIRECTION_LEFT = 2;
+const DIRECTION_BOTTOM = 1;
+let lives = 3;
+let ghostCount = 4;
+let ghostImageLocations = [
+    { x: 0, y: 0 },
+    { x: 176, y: 0 },
+    { x: 0, y: 121 },
+    { x: 176, y: 121 },
+];
 
-// Bird variables
-let birdX = 50;
-let birdY = 50;
-let birdVelocity = 0;
-let birdAcceleration = 0.1;
-
-// Pipe variables
-let pipeX = 400;
-let pipeY = canvas.height - 200;
-
-// score and highscore variables
-let scoreDiv = document.getElementById('score-display');
+// Game variables
+let fps = 30;
+let pacman;
+let oneBlockSize = 20;
 let score = 0;
-let highScore = 0;
+let ghosts = [];
+let wallSpaceWidth = oneBlockSize / 1.6;
+let wallOffset = (oneBlockSize - wallSpaceWidth) / 2;
+let wallInnerColor = "black";
 
-// we add a bool variable, so we can check when flappy passes we increase
-// the value
-let scored = false;
+// we now create the map of the walls,
+// if 1 wall, if 0 not wall
+// 21 columns // 23 rows
+let map = [
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    [1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1],
+    [1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1],
+    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    [1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 1],
+    [1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1],
+    [1, 1, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 1, 1],
+    [0, 0, 0, 0, 1, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 0, 0, 0, 0],
+    [1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1],
+    [2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2],
+    [1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 2, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1],
+    [0, 0, 0, 0, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 0, 0, 0, 0],
+    [0, 0, 0, 0, 1, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 0, 0, 0, 0],
+    [1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1],
+    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    [1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1],
+    [1, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1],
+    [1, 1, 2, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 2, 1, 1],
+    [1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1],
+    [1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1],
+    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+];
 
-// lets us control the bird with the space key
-document.body.onkeyup = function(e) {
-    if (e.code == 'Space') {
-        birdVelocity = FLAP_SPEED;
+let randomTargetsForGhosts = [
+    { x: 1 * oneBlockSize, y: 1 * oneBlockSize },
+    { x: 1 * oneBlockSize, y: (map.length - 2) * oneBlockSize },
+    { x: (map[0].length - 2) * oneBlockSize, y: oneBlockSize },
+    {
+        x: (map[0].length - 2) * oneBlockSize,
+        y: (map.length - 2) * oneBlockSize,
+    },
+];
+
+// for (let i = 0; i < map.length; i++) {
+//     for (let j = 0; j < map[0].length; j++) {
+//         map[i][j] = 2;
+//     }
+// }
+
+let createNewPacman = () => {
+    pacman = new Pacman(
+        oneBlockSize,
+        oneBlockSize,
+        oneBlockSize,
+        oneBlockSize,
+        oneBlockSize / 5
+    );
+};
+
+let gameLoop = () => {
+    update();
+    draw();
+};
+
+let gameInterval = setInterval(gameLoop, 1000 / fps);
+
+let restartPacmanAndGhosts = () => {
+    createNewPacman();
+    createGhosts();
+};
+
+let onGhostCollision = () => {
+    lives--;
+    restartPacmanAndGhosts();
+    if (lives == 0) {
     }
-}
+};
 
-// lets us restart the game if we hit game-over
-document.getElementById('restart-button').addEventListener('click', function() {
-    hideEndMenu();
-    resetGame();
-    loop();
-})
-
-
-
-function increaseScore() {
-    // increase now our counter when our flappy passes the pipes
-    if(birdX > pipeX + PIPE_WIDTH && 
-        (birdY < pipeY + PIPE_GAP || 
-          birdY + BIRD_HEIGHT > pipeY + PIPE_GAP) && 
-          !scored) {
-        score++;
-        scoreDiv.innerHTML = score;
-        scored = true;
+let update = () => {
+    pacman.moveProcess();
+    pacman.eat();
+    updateGhosts();
+    if (pacman.checkGhostCollision(ghosts)) {
+        onGhostCollision();
     }
+};
 
-    // reset the flag, if bird passes the pipes
-    if (birdX < pipeX + PIPE_WIDTH) {
-        scored = false;
+let drawFoods = () => {
+    for (let i = 0; i < map.length; i++) {
+        for (let j = 0; j < map[0].length; j++) {
+            if (map[i][j] == 2) {
+                createRect(
+                    j * oneBlockSize + oneBlockSize / 3,
+                    i * oneBlockSize + oneBlockSize / 3,
+                    oneBlockSize / 3,
+                    oneBlockSize / 3,
+                    "#FEB897"
+                );
+            }
+        }
     }
-}
+};
 
-function collisionCheck() {
-    // Create bounding Boxes for the bird and the pipes
+let drawRemainingLives = () => {
+    canvasContext.font = "20px Emulogic";
+    canvasContext.fillStyle = "white";
+    canvasContext.fillText("Lives: ", 220, oneBlockSize * (map.length + 1));
 
-    const birdBox = {
-        x: birdX,
-        y: birdY,
-        width: BIRD_WIDTH,
-        height: BIRD_HEIGHT
+    for (let i = 0; i < lives; i++) {
+        canvasContext.drawImage(
+            pacmanFrames,
+            2 * oneBlockSize,
+            0,
+            oneBlockSize,
+            oneBlockSize,
+            350 + i * oneBlockSize,
+            oneBlockSize * map.length + 2,
+            oneBlockSize,
+            oneBlockSize
+        );
     }
+};
 
-    const topPipeBox = {
-        x: pipeX,
-        y: pipeY - PIPE_GAP + BIRD_HEIGHT,
-        width: PIPE_WIDTH,
-        height: pipeY
+let drawScore = () => {
+    canvasContext.font = "20px Emulogic";
+    canvasContext.fillStyle = "white";
+    canvasContext.fillText(
+        "Score: " + score,
+        0,
+        oneBlockSize * (map.length + 1)
+    );
+};
+
+let draw = () => {
+    canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+    createRect(0, 0, canvas.width, canvas.height, "black");
+    drawWalls();
+    drawFoods();
+    drawGhosts();
+    pacman.draw();
+    drawScore();
+    drawRemainingLives();
+};
+
+let drawWalls = () => {
+    for (let i = 0; i < map.length; i++) {
+        for (let j = 0; j < map[0].length; j++) {
+            if (map[i][j] == 1) {
+                createRect(
+                    j * oneBlockSize,
+                    i * oneBlockSize,
+                    oneBlockSize,
+                    oneBlockSize,
+                    "#342DCA"
+                );
+                if (j > 0 && map[i][j - 1] == 1) {
+                    createRect(
+                        j * oneBlockSize,
+                        i * oneBlockSize + wallOffset,
+                        wallSpaceWidth + wallOffset,
+                        wallSpaceWidth,
+                        wallInnerColor
+                    );
+                }
+
+                if (j < map[0].length - 1 && map[i][j + 1] == 1) {
+                    createRect(
+                        j * oneBlockSize + wallOffset,
+                        i * oneBlockSize + wallOffset,
+                        wallSpaceWidth + wallOffset,
+                        wallSpaceWidth,
+                        wallInnerColor
+                    );
+                }
+
+                if (i < map.length - 1 && map[i + 1][j] == 1) {
+                    createRect(
+                        j * oneBlockSize + wallOffset,
+                        i * oneBlockSize + wallOffset,
+                        wallSpaceWidth,
+                        wallSpaceWidth + wallOffset,
+                        wallInnerColor
+                    );
+                }
+
+                if (i > 0 && map[i - 1][j] == 1) {
+                    createRect(
+                        j * oneBlockSize + wallOffset,
+                        i * oneBlockSize,
+                        wallSpaceWidth,
+                        wallSpaceWidth + wallOffset,
+                        wallInnerColor
+                    );
+                }
+            }
+        }
     }
+};
 
-    const bottomPipeBox = {
-        x: pipeX,
-        y: pipeY + PIPE_GAP + BIRD_HEIGHT,
-        width: PIPE_WIDTH,
-        height: canvas.height - pipeY - PIPE_GAP
+let createGhosts = () => {
+    ghosts = [];
+    for (let i = 0; i < ghostCount * 2; i++) {
+        let newGhost = new Ghost(
+            9 * oneBlockSize + (i % 2 == 0 ? 0 : 1) * oneBlockSize,
+            10 * oneBlockSize + (i % 2 == 0 ? 0 : 1) * oneBlockSize,
+            oneBlockSize,
+            oneBlockSize,
+            pacman.speed / 2,
+            ghostImageLocations[i % 4].x,
+            ghostImageLocations[i % 4].y,
+            124,
+            116,
+            6 + i
+        );
+        ghosts.push(newGhost);
     }
+};
 
-    // Check for collision with upper pipe box
-    if (birdBox.x + birdBox.width > topPipeBox.x &&
-        birdBox.x < topPipeBox.x + topPipeBox.width &&
-        birdBox.y < topPipeBox.y) {
-            return true;
-    }
+createNewPacman();
+createGhosts();
+gameLoop();
 
-    // Check for collision with lower pipe box
-    if (birdBox.x + birdBox.width > bottomPipeBox.x &&
-        birdBox.x < bottomPipeBox.x + bottomPipeBox.width &&
-        birdBox.y + birdBox.height > bottomPipeBox.y) {
-            return true;
-    }
-
-    // check if bird hits boundaries
-    if (birdY < 0 || birdY + BIRD_HEIGHT > canvas.height) {
-        return true;
-    }
-
-
-    return false;
-}
-
-function hideEndMenu () {
-    document.getElementById('end-menu').style.display = 'none';
-    gameContainer.classList.remove('backdrop-blur');
-}
-
-function showEndMenu () {
-    document.getElementById('end-menu').style.display = 'block';
-    gameContainer.classList.add('backdrop-blur');
-    document.getElementById('end-score').innerHTML = score;
-    // This way we update always our highscore at the end of our game
-    // if we have a higher high score than the previous
-    if (highScore < score) {
-        highScore = score;
-    }
-    document.getElementById('best-score').innerHTML = highScore;
-}
-
-// we reset the values to the beginning so we start 
-// with the bird at the beginning
-function resetGame() {
-    birdX = 50;
-    birdY = 50;
-    birdVelocity = 0;
-    birdAcceleration = 0.1;
-
-    pipeX = 400;
-    pipeY = canvas.height - 200;
-
-    score = 0;
-}
-
-function endGame() {
-    showEndMenu();
-}
-
-function loop() {
-    // reset the ctx after every loop iteration
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Flappy Bird
-    ctx.drawImage(flappyImg, birdX, birdY);
-
-    // Draw Pipes
-    ctx.fillStyle = '#333';
-    ctx.fillRect(pipeX, -100, PIPE_WIDTH, pipeY);
-    ctx.fillRect(pipeX, pipeY + PIPE_GAP, PIPE_WIDTH, canvas.height - pipeY);
-
-    // now we would need to add an collision check to display our end-menu
-    // and end the game
-    // the collisionCheck will return us true if we have a collision
-    // otherwise false
-    if (collisionCheck()) {
-        endGame();
-        return;
-    }
-
-
-    // forgot to mvoe the pipes
-    pipeX -= 1.5;
-    // if the pipe moves out of the frame we need to reset the pipe
-    if (pipeX < -50) {
-        pipeX = 400;
-        pipeY = Math.random() * (canvas.height - PIPE_GAP) + PIPE_WIDTH;
-    }
-
-    // apply gravity to the bird and let it move
-    birdVelocity += birdAcceleration;
-    birdY += birdVelocity;
-
-    // always check if you call the function ...
-    increaseScore()
-    requestAnimationFrame(loop);
-}
-
-loop();
+window.addEventListener("keydown", (event) => {
+    let k = event.keyCode;
+    setTimeout(() => {
+        if (k == 37 || k == 65) {
+            // left arrow or a
+            pacman.nextDirection = DIRECTION_LEFT;
+        } else if (k == 38 || k == 87) {
+            // up arrow or w
+            pacman.nextDirection = DIRECTION_UP;
+        } else if (k == 39 || k == 68) {
+            // right arrow or d
+            pacman.nextDirection = DIRECTION_RIGHT;
+        } else if (k == 40 || k == 83) {
+            // bottom arrow or s
+            pacman.nextDirection = DIRECTION_BOTTOM;
+        }
+    }, 1);
+});
